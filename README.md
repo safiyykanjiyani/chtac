@@ -1,2 +1,2 @@
-# chtac
-This is a full-stack application that allows the user to improve their chess by learning tactics. The way this is different from the chess puzzles on sites like chess.com and lichess is through the presentation. 
+# gradient
+This is a extension that lets you visualize a chess board in terms of gradients. Each color's pieces applies an influence onto the board, creating a gradient. The intention for this application is to better help newer players visualise the board not simply in terms of its pieces, but as spaces. 
