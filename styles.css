@@ -1,0 +1,17 @@
+/* styles.css */
+
+/* Ensure squares are positioned relatively to contain the overlay */
+.cg-board .square {
+    position: relative;
+  }
+  
+  /* Style for the influence overlay */
+  .influence-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks to pass through the overlay */
+  }
+  

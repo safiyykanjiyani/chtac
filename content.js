@@ -5,34 +5,37 @@ window.addEventListener('load', () => {
   });
   
   function initInfluenceOverlay() {
-    const board = document.querySelector('cg-board');
-    if (!board) return;
-  
-    const observer = new MutationObserver(mutations => {
-      if (window.influenceUpdateTimeout) clearTimeout(window.influenceUpdateTimeout);
-      window.influenceUpdateTimeout = setTimeout(() => {
-        updateInfluence();
-      }, 100);
-    });
-  
-    observer.observe(board, { childList: true, subtree: true });
+    const board = document.querySelector('.cg-board');
+    if (!board) {
+      console.error('Chess board not found.');
+      return;
+    }
   
     // Initial update
     updateInfluence();
+  
+    // Observe changes to the board
+    const observer = new MutationObserver(() => {
+      updateInfluence();
+    });
+  
+    observer.observe(board, { childList: true, subtree: true });
   }
   
   function updateInfluence() {
-    const pieces = document.querySelectorAll('piece');
+    const pieces = document.querySelectorAll('.cg-board piece');
     const piecePositions = [];
   
     pieces.forEach(piece => {
-      const type = piece.getAttribute('class'); // e.g., 'white pawn'
-      const position = piece.parentElement.getAttribute('class'); // e.g., 'square e4'
+      const type = piece.getAttribute('class'); // e.g., 'white knight'
+      const position = piece.parentElement.getAttribute('data-key'); // e.g., 'e4'
   
-      piecePositions.push({
-        type,
-        position
-      });
+      if (type && position) {
+        piecePositions.push({
+          type,
+          position
+        });
+      }
     });
   
     const influenceMap = calculateInfluence(piecePositions);
@@ -44,8 +47,9 @@ window.addEventListener('load', () => {
   
     piecePositions.forEach(piece => {
       const { type, position } = piece;
-      const [color, pieceType] = type.split(' ');
-      const fromSquare = position.split(' ')[1];
+      const [color, ...typeParts] = type.split(' ');
+      const pieceType = typeParts.join(' ');
+      const fromSquare = position;
   
       const moves = getPieceMoves(pieceType, fromSquare, color, piecePositions);
   
@@ -65,7 +69,7 @@ window.addEventListener('load', () => {
       case 'pawn':
         return getPawnMoves(fromSquare, color, piecePositions);
       case 'knight':
-        return getKnightMoves(fromSquare, color);
+        return getKnightMoves(fromSquare);
       case 'bishop':
         return getBishopMoves(fromSquare, color, piecePositions);
       case 'rook':
@@ -73,30 +77,128 @@ window.addEventListener('load', () => {
       case 'queen':
         return getQueenMoves(fromSquare, color, piecePositions);
       case 'king':
-        return getKingMoves(fromSquare, color);
+        return getKingMoves(fromSquare);
       default:
         return [];
     }
   }
   
-  // Helper functions and move generation functions as implemented above
+  // Helper functions and move generation functions
   
-  // ... (Include all helper functions and move generation functions here)
+  function squareToCoords(square) {
+    const file = square.charCodeAt(0) - 'a'.charCodeAt(0); // 0 to 7
+    const rank = parseInt(square[1], 10) - 1; // 0 to 7
+    return { file, rank };
+  }
+  
+  function coordsToSquare(file, rank) {
+    if (file < 0 || file > 7 || rank < 0 || rank > 7) return null;
+    const fileChar = String.fromCharCode('a'.charCodeAt(0) + file);
+    const square = fileChar + (rank + 1);
+    return square;
+  }
+  
   function isOccupied(square, piecePositions) {
-    return piecePositions.some(piece => {
-      const position = piece.position.split(' ')[1];
-      return position === square;
-    });
+    return piecePositions.some(piece => piece.position === square);
   }
   
   function isOccupiedByOpponent(square, color, piecePositions) {
     return piecePositions.some(piece => {
-      const position = piece.position.split(' ')[1];
       const [pieceColor] = piece.type.split(' ');
-      return position === square && pieceColor !== color;
+      return piece.position === square && pieceColor !== color;
     });
   }
-
+  
+  function getPawnMoves(fromSquare, color, piecePositions) {
+    const moves = [];
+    const direction = color === 'white' ? 1 : -1;
+    const { file, rank } = squareToCoords(fromSquare);
+  
+    // Forward moves
+    const oneStepRank = rank + direction;
+    const oneStepSquare = coordsToSquare(file, oneStepRank);
+    if (oneStepSquare && !isOccupied(oneStepSquare, piecePositions)) {
+      moves.push(oneStepSquare);
+  
+      // Initial two-step move
+      const initialRank = color === 'white' ? 1 : 6;
+      if (rank === initialRank) {
+        const twoStepRank = rank + 2 * direction;
+        const twoStepSquare = coordsToSquare(file, twoStepRank);
+        if (twoStepSquare && !isOccupied(twoStepSquare, piecePositions)) {
+          moves.push(twoStepSquare);
+        }
+      }
+    }
+  
+    // Captures (influence squares even if not capturing)
+    [file - 1, file + 1].forEach(f => {
+      const captureSquare = coordsToSquare(f, rank + direction);
+      if (captureSquare) {
+        moves.push(captureSquare);
+      }
+    });
+  
+    return moves;
+  }
+  
+  function getKnightMoves(fromSquare) {
+    const moves = [];
+    const { file, rank } = squareToCoords(fromSquare);
+    const deltas = [
+      [1, 2], [2, 1], [-1, 2], [-2, 1],
+      [1, -2], [2, -1], [-1, -2], [-2, -1]
+    ];
+  
+    deltas.forEach(delta => {
+      const [df, dr] = delta;
+      const targetSquare = coordsToSquare(file + df, rank + dr);
+      if (targetSquare) {
+        moves.push(targetSquare);
+      }
+    });
+  
+    return moves;
+  }
+  
+  function getBishopMoves(fromSquare, color, piecePositions) {
+    return getSlidingMoves(fromSquare, color, piecePositions, [
+      [1, 1], [1, -1], [-1, 1], [-1, -1]
+    ]);
+  }
+  
+  function getRookMoves(fromSquare, color, piecePositions) {
+    return getSlidingMoves(fromSquare, color, piecePositions, [
+      [1, 0], [-1, 0], [0, 1], [0, -1]
+    ]);
+  }
+  
+  function getQueenMoves(fromSquare, color, piecePositions) {
+    return getSlidingMoves(fromSquare, color, piecePositions, [
+      [1, 1], [1, -1], [-1, 1], [-1, -1],
+      [1, 0], [-1, 0], [0, 1], [0, -1]
+    ]);
+  }
+  
+  function getKingMoves(fromSquare) {
+    const moves = [];
+    const { file, rank } = squareToCoords(fromSquare);
+    const deltas = [
+      [1, 1], [1, -1], [-1, 1], [-1, -1],
+      [1, 0], [-1, 0], [0, 1], [0, -1]
+    ];
+  
+    deltas.forEach(delta => {
+      const [df, dr] = delta;
+      const targetSquare = coordsToSquare(file + df, rank + dr);
+      if (targetSquare) {
+        moves.push(targetSquare);
+      }
+    });
+  
+    return moves;
+  }
+  
   function getSlidingMoves(fromSquare, color, piecePositions, directions) {
     const moves = [];
     const { file, rank } = squareToCoords(fromSquare);
@@ -122,132 +224,18 @@ window.addEventListener('load', () => {
   
     return moves;
   }
-
-  function getKingMoves(fromSquare, color) {
-    const moves = [];
-    const { file, rank } = squareToCoords(fromSquare);
-    const deltas = [
-      [1, 0], [-1, 0], [0, 1], [0, -1],
-      [1, 1], [1, -1], [-1, 1], [-1, -1]
-    ];
   
-    deltas.forEach(delta => {
-      const [df, dr] = delta;
-      const targetSquare = coordsToSquare(file + df, rank + dr);
-      if (targetSquare) {
-        moves.push(targetSquare);
-      }
-    });
-  
-    return moves;
-  }
-
-  function getQueenMoves(fromSquare, color, piecePositions) {
-    return getSlidingMoves(fromSquare, color, piecePositions, [
-      [1, 0], [-1, 0], [0, 1], [0, -1],
-      [1, 1], [1, -1], [-1, 1], [-1, -1]
-    ]);
-  }
-
-  function getRookMoves(fromSquare, color, piecePositions) {
-    return getSlidingMoves(fromSquare, color, piecePositions, [
-      [1, 0], [-1, 0], [0, 1], [0, -1]
-    ]);
-  }
-
-  function getBishopMoves(fromSquare, color, piecePositions) {
-    return getSlidingMoves(fromSquare, color, piecePositions, [
-      [1, 1], [1, -1], [-1, 1], [-1, -1]
-    ]);
-  }
-
-  function getKnightMoves(fromSquare, color) {
-    const moves = [];
-    const { file, rank } = squareToCoords(fromSquare);
-    const deltas = [
-      [1, 2], [2, 1], [-1, 2], [-2, 1],
-      [1, -2], [2, -1], [-1, -2], [-2, -1]
-    ];
-  
-    deltas.forEach(delta => {
-      const [df, dr] = delta;
-      const targetSquare = coordsToSquare(file + df, rank + dr);
-      if (targetSquare) {
-        moves.push(targetSquare);
-      }
-    });
-  
-    return moves;
-  }
-
-  function getPawnMoves(fromSquare, color, piecePositions) {
-    const moves = [];
-    const direction = color === 'white' ? 1 : -1;
-    const { file, rank } = squareToCoords(fromSquare);
-  
-    // Forward move
-    const oneStep = coordsToSquare(file, rank + direction);
-    if (oneStep && !isOccupied(oneStep, piecePositions)) {
-      moves.push(oneStep);
-  
-      // Initial two-step move
-      const initialRank = color === 'white' ? 1 : 6;
-      if (rank === initialRank) {
-        const twoStep = coordsToSquare(file, rank + 2 * direction);
-        if (twoStep && !isOccupied(twoStep, piecePositions)) {
-          moves.push(twoStep);
-        }
-      }
-    }
-  
-    // Captures
-    const captureFiles = [file - 1, file + 1];
-    captureFiles.forEach(f => {
-      const captureSquare = coordsToSquare(f, rank + direction);
-      if (captureSquare) {
-        if (isOccupiedByOpponent(captureSquare, color, piecePositions)) {
-          moves.push(captureSquare);
-        }
-        // Pawns also influence squares diagonally even if not capturing
-        else {
-          moves.push(captureSquare);
-        }
-      }
-    });
-  
-    return moves;
-  }
-
-// Helper function to convert square (e.g., 'e4') to file and rank indices
-function squareToCoords(square) {
-    const file = square.charCodeAt(0) - 'a'.charCodeAt(0); // 0 to 7
-    const rank = parseInt(square[1], 10) - 1; // 0 to 7
-    return { file, rank };
-  }
-  
-  // Helper function to convert file and rank indices to square (e.g., 'e4')
-  function coordsToSquare(file, rank) {
-    if (file < 0 || file > 7 || rank < 0 || rank > 7) return null;
-    const fileChar = String.fromCharCode('a'.charCodeAt(0) + file);
-    const square = fileChar + (rank + 1);
-    return square;
-  }
-  
-
-  
-  
-  // Overlay functions remain the same
   function overlayInfluence(influenceMap) {
+    // Remove existing overlays
+    document.querySelectorAll('.influence-overlay').forEach(el => el.remove());
+  
     Object.keys(influenceMap).forEach(square => {
-      const squareElement = document.querySelector(`.cg-board .square.${square}`);
+      const squareElement = document.querySelector(`.cg-board .square[data-key='${square}']`);
       if (!squareElement) return;
   
-      let overlay = squareElement.querySelector('.influence-overlay');
-      if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.classList.add('influence-overlay');
-        squareElement.appendChild(overlay);
-      }
+      const overlay = document.createElement('div');
+      overlay.classList.add('influence-overlay');
+      squareElement.appendChild(overlay);
   
       const influence = influenceMap[square];
       const color = getInfluenceColor(influence);
@@ -264,11 +252,11 @@ function squareToCoords(square) {
   
     let color = 'transparent';
     if (whiteInfluence > blackInfluence) {
-      color = `rgba(0, 0, 255, ${opacity})`;
+      color = `rgba(0, 0, 255, ${opacity})`; // Blue for white
     } else if (blackInfluence > whiteInfluence) {
-      color = `rgba(255, 0, 0, ${opacity})`;
+      color = `rgba(255, 0, 0, ${opacity})`; // Red for black
     } else if (whiteInfluence === blackInfluence && whiteInfluence > 0) {
-      color = `rgba(128, 0, 128, ${opacity})`;
+      color = `rgba(128, 0, 128, ${opacity})`; // Purple for equal influence
     }
   
     return color;
